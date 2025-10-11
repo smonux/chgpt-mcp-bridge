@@ -1,0 +1,17 @@
+{
+  "serverConfig": {
+    "command": "/bin/sh",
+    "args": [
+      "-c"
+    ]
+  },
+  "mcpServers": {
+    "desktop-commander": {
+      "command": "npx",
+      "args": [
+        "@wonderwhy-er/desktop-commander@latest"
+      ],
+     "transport": "stdio"
+    }
+  }
+}
