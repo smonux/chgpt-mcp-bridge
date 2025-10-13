@@ -140,7 +140,9 @@ class IPAllowlistMiddleware(Middleware):
                             remote_ip = v.split(",")[0].strip()
                             break
                 except Exception:
-                    pass
+                    logger.debug(
+                        "Failed to read X-Forwarded-For from headers", exc_info=True
+                    )
                 if remote_ip:
                     try:
                         ipaddress.IPv4Address(remote_ip)
@@ -151,7 +153,9 @@ class IPAllowlistMiddleware(Middleware):
                         )
                         return None
         except Exception:
-            pass
+            logger.debug(
+                "Failed to extract client IP from FastMCP context", exc_info=True
+            )
 
         # 2) Fallback: Attempt to read request headers in common ASGI shapes
         req = getattr(ctx, "request", None)
@@ -207,7 +211,9 @@ class IPAllowlistMiddleware(Middleware):
                     ipaddress.IPv4Address(candidate)
                     return candidate
         except Exception:
-            pass
+            logger.debug(
+                "Failed to resolve IP from ctx client/client_address", exc_info=True
+            )
 
         return None
 
@@ -245,13 +251,15 @@ if __name__ == "__main__":
     proxy = FastMCP.as_proxy(config, name=SERVER_NAME, auth=auth_provider)
 
     logger.info(
-        "Starting %s on http://%s:%s/%s (public base: %s)",
-        SERVER_NAME,
-        INTERNAL_HOST,
-        INTERNAL_PORT,
-        OBFUSCATED_PATH,
-        BASE_URL,
+        "Starting {0} on http://{1}:{2}/{3} (public base: {4}/{3})".format(
+            SERVER_NAME,
+            INTERNAL_HOST,
+            INTERNAL_PORT,
+            OBFUSCATED_PATH,
+            BASE_URL,
+        )
     )
+
     if ALLOWED_NETWORKS:
         logger.info("Loaded %d allowed IPv4 networks", len(ALLOWED_NETWORKS))
     else:
