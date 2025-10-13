@@ -10,10 +10,27 @@ from fastmcp import FastMCP
 from fastmcp.server.auth.providers.github import GitHubProvider
 from fastmcp.server.middleware import Middleware, MiddlewareContext, CallNext
 from fastmcp.server.dependencies import get_access_token
+import logging
+
+DEBUGLEVEL = os.getenv("DEBUGLEVEL", "").strip()
+if DEBUGLEVEL:
+    try:
+        level = getattr(logging, DEBUGLEVEL.upper())
+        # ensure it's an int logging level
+        if not isinstance(level, int):
+            raise AttributeError()
+    except Exception:
+        level = logging.WARNING
+else:
+    level = logging.WARNING
+
+logging.basicConfig(level=level)
 
 # === Environment variables
-ALLOWED_RANGES_FILE = os.getenv('ALLOWED_RANGES_FILE', '')
-GITHUB_USERS = {u.strip() for u in os.getenv("GITHUB_USERS", "").split(",") if u.strip()}
+ALLOWED_RANGES_FILE = os.getenv("ALLOWED_RANGES_FILE", "")
+GITHUB_USERS = {
+    u.strip() for u in os.getenv("GITHUB_USERS", "").split(",") if u.strip()
+}
 EXTERNAL_HOSTNAME = os.getenv("EXTERNAL_HOSTNAME")  # e.g. "<server.tailnet>.ts.net"
 INTERNAL_PORT = int(os.getenv("INTERNAL_PORT", "8888"))
 INTERNAL_HOST = os.getenv("INTERNAL_HOST", "127.0.0.1")
@@ -25,10 +42,12 @@ MCP_JSON_PATH = os.getenv("MCP_JSON_PATH", "./mcp.json")
 BASE_URL_SCHEME = os.getenv("BASE_URL_SCHEME", "https")
 OAUTH_REDIRECT_PATH = os.getenv("OAUTH_REDIRECT_PATH", "/auth/callback")
 SERVER_NAME = os.getenv("SERVER_NAME", "fastmcp-proxy")
-OBFUSCATED_PATH= os.getenv("OBFUSCATED_PATH", "shouldberandom")
+OBFUSCATED_PATH = os.getenv("OBFUSCATED_PATH", "shouldberandom")
 
 if not (GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET and EXTERNAL_HOSTNAME):
-    raise RuntimeError("Missing required env vars: GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, EXTERNAL_HOSTNAME")
+    raise RuntimeError(
+        "Missing required env vars: GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, EXTERNAL_HOSTNAME"
+    )
 
 BASE_URL = f"{BASE_URL_SCHEME}://{EXTERNAL_HOSTNAME}".rstrip("/")
 
@@ -39,6 +58,7 @@ auth_provider = GitHubProvider(
     base_url=BASE_URL,
     redirect_path=OAUTH_REDIRECT_PATH,
 )
+
 
 # === Helper: load IPv4 CIDRs from file (newline separated) ===
 def load_ipv4_cidrs_from_file(path: str) -> List[ipaddress.IPv4Network]:
@@ -60,9 +80,11 @@ def load_ipv4_cidrs_from_file(path: str) -> List[ipaddress.IPv4Network]:
             raise ValueError(f"Invalid IPv4 CIDR/network in {path}: '{line}' -> {exc}")
     return networks
 
+
 ALLOWED_NETWORKS: List[ipaddress.IPv4Network] = []
 if ALLOWED_RANGES_FILE:
     ALLOWED_NETWORKS = load_ipv4_cidrs_from_file(ALLOWED_RANGES_FILE)
+
 
 # === IP allowlist middleware (IPv4-only, X-Forwarded-For strict) ===
 class IPAllowlistMiddleware(Middleware):
@@ -90,15 +112,15 @@ class IPAllowlistMiddleware(Middleware):
         """
         # 1) Try FastMCP context request (most reliable in this stack)
         try:
-            fctx = getattr(ctx, 'fastmcp_context', None)
+            fctx = getattr(ctx, "fastmcp_context", None)
             if fctx is not None:
                 req = fctx.get_http_request()
-                remote_ip = getattr(getattr(req, 'client', None), 'host', None)
+                remote_ip = getattr(getattr(req, "client", None), "host", None)
                 # Override with X-Forwarded-For first value if present
                 try:
                     for k, v in req.headers.items():
-                        if k.lower() == 'x-forwarded-for':
-                            remote_ip = v.split(',')[0].strip()
+                        if k.lower() == "x-forwarded-for":
+                            remote_ip = v.split(",")[0].strip()
                             break
                 except Exception:
                     pass
@@ -112,23 +134,23 @@ class IPAllowlistMiddleware(Middleware):
             pass
 
         # 2) Fallback: Attempt to read request headers in common ASGI shapes
-        req = getattr(ctx, 'request', None)
+        req = getattr(ctx, "request", None)
         xff = None
         if req is not None:
             try:
-                xff = req.headers.get('x-forwarded-for')
+                xff = req.headers.get("x-forwarded-for")
             except Exception:
-                scope = getattr(req, 'scope', None)
-                if scope and 'headers' in scope:
-                    for k, v in scope['headers']:
+                scope = getattr(req, "scope", None)
+                if scope and "headers" in scope:
+                    for k, v in scope["headers"]:
                         try:
-                            if k.decode().lower() == 'x-forwarded-for':
+                            if k.decode().lower() == "x-forwarded-for":
                                 xff = v.decode()
                                 break
                         except Exception:
                             continue
         if xff:
-            first = xff.split(',')[0].strip()
+            first = xff.split(",")[0].strip()
             try:
                 ipaddress.IPv4Address(first)
                 return first
@@ -137,9 +159,13 @@ class IPAllowlistMiddleware(Middleware):
 
         try:
             if req is not None:
-                client = getattr(req, 'client', None)
+                client = getattr(req, "client", None)
                 if client:
-                    candidate = client[0] if isinstance(client, tuple) and len(client) >= 1 else getattr(client, 'host', None)
+                    candidate = (
+                        client[0]
+                        if isinstance(client, tuple) and len(client) >= 1
+                        else getattr(client, "host", None)
+                    )
                     if candidate is not None:
                         ipaddress.IPv4Address(candidate)
                         return candidate
@@ -147,9 +173,15 @@ class IPAllowlistMiddleware(Middleware):
             pass
 
         try:
-            client = getattr(ctx, 'client', None) or getattr(ctx, 'client_address', None)
+            client = getattr(ctx, "client", None) or getattr(
+                ctx, "client_address", None
+            )
             if client:
-                candidate = client[0] if isinstance(client, tuple) and len(client) >= 1 else getattr(client, 'host', None)
+                candidate = (
+                    client[0]
+                    if isinstance(client, tuple) and len(client) >= 1
+                    else getattr(client, "host", None)
+                )
                 if candidate is not None:
                     ipaddress.IPv4Address(candidate)
                     return candidate
@@ -166,7 +198,9 @@ class IPAllowlistMiddleware(Middleware):
         client_ip = self._extract_client_ipv4(ctx)
         if not client_ip:
             # Treat missing/invalid XFF or invalid peer as not allowed
-            raise PermissionError(f"IP '{client_ip or 'unknown'}' not allowed or invalid XFF")
+            raise PermissionError(
+                f"IP '{client_ip or 'unknown'}' not allowed or invalid XFF"
+            )
 
         if not self._is_allowed_ip(client_ip):
             raise PermissionError(f"IP '{client_ip}' not allowed")
@@ -180,12 +214,15 @@ class IPAllowlistMiddleware(Middleware):
 
         client_ip = self._extract_client_ipv4(ctx)
         if not client_ip:
-            raise PermissionError(f"IP '{client_ip or 'unknown'}' not allowed or invalid XFF")
+            raise PermissionError(
+                f"IP '{client_ip or 'unknown'}' not allowed or invalid XFF"
+            )
 
         if not self._is_allowed_ip(client_ip):
             raise PermissionError(f"IP '{client_ip}' not allowed")
 
         return await call_next(ctx)
+
 
 # === Allowlist middleware (GitHub users) ===
 class AllowlistMiddleware(Middleware):
@@ -203,6 +240,7 @@ class AllowlistMiddleware(Middleware):
         self._check()
         return await call_next(ctx)
 
+
 if __name__ == "__main__":
     config = json.loads(Path(MCP_JSON_PATH).read_text(encoding="utf-8"))
     proxy = FastMCP.as_proxy(config, name=SERVER_NAME, auth=auth_provider)
@@ -214,5 +252,9 @@ if __name__ == "__main__":
     # Keep the GitHub allowlist middleware
     proxy.add_middleware(AllowlistMiddleware())
 
-    proxy.run(transport="http", host=INTERNAL_HOST, port=INTERNAL_PORT, path=f"/{OBFUSCATED_PATH}")
-
+    proxy.run(
+        transport="http",
+        host=INTERNAL_HOST,
+        port=INTERNAL_PORT,
+        path=f"/{OBFUSCATED_PATH}",
+    )
