@@ -58,3 +58,103 @@ Assuming you have an account. Go to https://github.com/settings/developers and c
  - HomePage URL. This is where you will be sent after form validation: https://chatgpt.com/connector_platform_oauth_redirect
  - Authorization callback URL: Use https://<server>.<tailnetname>.ts.net/auth/callback
 
+
+(THIS PART IS AI GENERATED)
+## Installation
+
+Prerequisites:
+- Python 3.10 or newer
+- A public HTTPS URL to your machine (via Tailscale Funnel, Cloudflare Tunnel, or ngrok)
+- A GitHub OAuth App (see section above)
+
+Steps:
+1) Clone and enter the repo
+   - git clone <this-repo-url>
+   - cd <repo>
+2) Create and activate a virtual environment
+   - python3 -m venv .venv
+   - source .venv/bin/activate  (Windows: .venv\\Scripts\\activate)
+3) Install dependencies
+   - pip install -r requirements.txt
+4) Create your environment file
+   - cp env.example .env
+   - Edit .env and fill in values (see Configuration below)
+5) Prepare your MCP server config
+   - Copy or edit mcp.json (example in mcp.json.example) so it points to your local stdio MCP servers.
+
+## Configuration
+
+Edit the .env file. Important variables:
+- INTERNAL_HOST / INTERNAL_PORT: Where the proxy listens locally (default 127.0.0.1:8888)
+- EXTERNAL_HOSTNAME: The public hostname clients will use (e.g. myhost.tail123.ts.net)
+- GITHUB_CLIENT_ID / GITHUB_CLIENT_SECRET: From your GitHub OAuth App
+- GITHUB_USERS: Comma-separated GitHub usernames allowed to access (leave empty to allow any authenticated user)
+- BASE_URL_SCHEME: Usually "https"
+- OAUTH_REDIRECT_PATH: Usually "/auth/callback"; must match your GitHub OAuth App
+- MCP_JSON_PATH: Path to your MCP server config (default ./mcp.json)
+- SERVER_NAME: Name ChatGPT will see for the MCP server
+- ALLOWED_RANGES_FILE: Optional path to IPv4 CIDR allowlist; if set, only those source IPs are allowed
+- OBFUSCATED_PATH: A random-looking path segment added to your public endpoint for obscurity (default "shouldberandom"). Set this to a long random string.
+
+Optional: Restrict source IPs to OpenAI
+- Generate a ranges file using the helper script:
+  - python generate_allowed_ranges_from_openai.py --output allowed-ranges.txt
+- Point ALLOWED_RANGES_FILE in .env to that file.
+
+## Running the proxy
+
+- Ensure your .env and mcp.json are ready
+- Start the server:
+  - python server.py
+- The proxy will listen on INTERNAL_HOST:INTERNAL_PORT and expose an HTTP endpoint path of /{OBFUSCATED_PATH}.
+
+Example local URL: http://127.0.0.1:8888/your-long-random-path
+
+To make it reachable by ChatGPT, put it behind a public HTTPS endpoint (see next section) and ensure EXTERNAL_HOSTNAME points to that hostname.
+
+## Getting a public HTTPS URL
+
+You can use any of the following:
+- Tailscale Funnel
+  - tailscale funnel <local-port>
+- Cloudflare Tunnel
+  - cloudflared tunnel --url http://127.0.0.1:<local-port>
+- ngrok
+  - ngrok http http://127.0.0.1:<local-port>
+
+Be sure the final public URL hostname matches EXTERNAL_HOSTNAME in your .env and that HTTPS is enabled.
+
+## Using with ChatGPT (Developer Mode MCP)
+
+- In ChatGPT, open Settings → Developer Mode → Add MCP server
+- Choose OAuth as the authentication type
+- Endpoint URL: https://<EXTERNAL_HOSTNAME>/{OBFUSCATED_PATH}
+- Follow the OAuth flow; after authorization, the proxy will only allow users in GITHUB_USERS
+- The proxy will forward MCP traffic to the local stdio servers described by your mcp.json
+
+## Updating allowed IP ranges
+
+OpenAI publishes ChatGPT Actions IP ranges at https://openai.com/chatgpt-actions.json
+- Regenerate your allowlist periodically:
+  - python generate_allowed_ranges_from_openai.py 
+- Restart the proxy to apply changes
+
+## Troubleshooting
+
+- 403 / not allowed:
+  - Check GITHUB_USERS includes your GitHub username
+  - If ALLOWED_RANGES_FILE is set, confirm your request is coming from an allowed IP (consider your tunnel provider’s X-Forwarded-For behavior)
+- OAuth callback mismatch:
+  - Ensure OAUTH_REDIRECT_PATH matches the GitHub App configuration
+  - Ensure EXTERNAL_HOSTNAME is correct and publicly reachable via HTTPS
+- Cannot reach MCP servers:
+  - Validate your mcp.json syntax and that the commands run locally via stdio
+- Logs too quiet / verbose:
+  - Set DEBUGLEVEL in .env (e.g., INFO, DEBUG, WARNING)
+
+## Uninstall / Cleanup
+
+- Deactivate and remove the virtualenv
+- Remove the tunnel configuration if any
+- Delete the .env if it contains secrets
+
