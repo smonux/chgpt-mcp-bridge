@@ -1,2 +1,4 @@
 fastmcp>=2.12
 python-dotenv>=1.0
+pytest>=8.0
+
