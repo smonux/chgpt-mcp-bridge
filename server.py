@@ -11,17 +11,8 @@ from fastmcp.server.auth.providers.github import GitHubProvider
 from fastmcp.server.middleware import Middleware, MiddlewareContext, CallNext
 from fastmcp.server.dependencies import get_access_token
 
-# === Environment variables / CLI fallback ===
-import argparse
-parser = argparse.ArgumentParser(add_help=False)
-parser.add_argument(
-    '--allowed-ranges-file',
-    dest='allowed_ranges_file',
-    help='Path to newline-separated IPv4 CIDR file (e.g. allowed-ranges.txt). Overrides ALLOWED_RANGES_FILE env var.',
-    default=None,
-)
-args, _ = parser.parse_known_args()
-ALLOWED_RANGES_FILE = args.allowed_ranges_file if args.allowed_ranges_file is not None else os.getenv('ALLOWED_RANGES_FILE', '')  # newline-separated CIDR file
+# === Environment variables
+ALLOWED_RANGES_FILE = os.getenv('ALLOWED_RANGES_FILE', '')
 GITHUB_USERS = {u.strip() for u in os.getenv("GITHUB_USERS", "").split(",") if u.strip()}
 EXTERNAL_HOSTNAME = os.getenv("EXTERNAL_HOSTNAME")  # e.g. "<server.tailnet>.ts.net"
 INTERNAL_PORT = int(os.getenv("INTERNAL_PORT", "8888"))
@@ -34,6 +25,7 @@ MCP_JSON_PATH = os.getenv("MCP_JSON_PATH", "./mcp.json")
 BASE_URL_SCHEME = os.getenv("BASE_URL_SCHEME", "https")
 OAUTH_REDIRECT_PATH = os.getenv("OAUTH_REDIRECT_PATH", "/auth/callback")
 SERVER_NAME = os.getenv("SERVER_NAME", "fastmcp-proxy")
+OBFUSCATED_PATH= os.getenv("OBFUSCATED_PATH", "shouldberandom")
 
 if not (GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET and EXTERNAL_HOSTNAME):
     raise RuntimeError("Missing required env vars: GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, EXTERNAL_HOSTNAME")
@@ -222,5 +214,5 @@ if __name__ == "__main__":
     # Keep the GitHub allowlist middleware
     proxy.add_middleware(AllowlistMiddleware())
 
-    proxy.run(transport="http", host=INTERNAL_HOST, port=INTERNAL_PORT)
+    proxy.run(transport="http", host=INTERNAL_HOST, port=INTERNAL_PORT, path=f"/{OBFUSCATED_PATH}")
 
