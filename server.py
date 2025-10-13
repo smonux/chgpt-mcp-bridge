@@ -25,6 +25,7 @@ else:
     level = logging.WARNING
 
 logging.basicConfig(level=level)
+logger = logging.getLogger("fastmcp_proxy")
 
 # === Environment variables
 ALLOWED_RANGES_FILE = os.getenv("ALLOWED_RANGES_FILE", "")
@@ -129,6 +130,9 @@ class IPAllowlistMiddleware(Middleware):
                         ipaddress.IPv4Address(remote_ip)
                         return remote_ip
                     except ValueError:
+                        logger.info(
+                            "Invalid client IP in request headers/peer: %s", remote_ip
+                        )
                         return None
         except Exception:
             pass
@@ -155,6 +159,7 @@ class IPAllowlistMiddleware(Middleware):
                 ipaddress.IPv4Address(first)
                 return first
             except ValueError:
+                logger.info("Invalid X-Forwarded-For value: %s", first)
                 return None
 
         try:
@@ -198,11 +203,15 @@ class IPAllowlistMiddleware(Middleware):
         client_ip = self._extract_client_ipv4(ctx)
         if not client_ip:
             # Treat missing/invalid XFF or invalid peer as not allowed
+            logger.info(
+                "Blocked request: missing/invalid client IP (invalid X-Forwarded-For or peer)"
+            )
             raise PermissionError(
                 f"IP '{client_ip or 'unknown'}' not allowed or invalid XFF"
             )
 
         if not self._is_allowed_ip(client_ip):
+            logger.info("Blocked request from disallowed IP: %s", client_ip)
             raise PermissionError(f"IP '{client_ip}' not allowed")
 
         return await call_next(ctx)
@@ -214,11 +223,15 @@ class IPAllowlistMiddleware(Middleware):
 
         client_ip = self._extract_client_ipv4(ctx)
         if not client_ip:
+            logger.info(
+                "Blocked request: missing/invalid client IP (invalid X-Forwarded-For or peer)"
+            )
             raise PermissionError(
                 f"IP '{client_ip or 'unknown'}' not allowed or invalid XFF"
             )
 
         if not self._is_allowed_ip(client_ip):
+            logger.info("Blocked request from disallowed IP: %s", client_ip)
             raise PermissionError(f"IP '{client_ip}' not allowed")
 
         return await call_next(ctx)
@@ -230,6 +243,9 @@ class AllowlistMiddleware(Middleware):
         token = get_access_token()
         login = token.claims.get("login") if token else None
         if not login or (GITHUB_USERS and login not in GITHUB_USERS):
+            logger.info(
+                "Blocked request from unauthorized user: %s", login or "anonymous"
+            )
             raise PermissionError(f"User '{login or 'anonymous'}' is not allowed")
 
     async def on_list_tools(self, ctx: MiddlewareContext, call_next: CallNext) -> Any:
@@ -244,6 +260,15 @@ class AllowlistMiddleware(Middleware):
 if __name__ == "__main__":
     config = json.loads(Path(MCP_JSON_PATH).read_text(encoding="utf-8"))
     proxy = FastMCP.as_proxy(config, name=SERVER_NAME, auth=auth_provider)
+
+    logger.info(
+        "Starting %s on http://%s:%s/%s (public base: %s)",
+        SERVER_NAME,
+        INTERNAL_HOST,
+        INTERNAL_PORT,
+        OBFUSCATED_PATH,
+        BASE_URL,
+    )
 
     # Add IP allowlist middleware first (so it runs before GitHub checks)
     if ALLOWED_NETWORKS:
