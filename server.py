@@ -1,4 +1,4 @@
-import os, asyncio, json
+import os, asyncio, json, signal
 from pathlib import Path
 from dotenv import load_dotenv
 import ipaddress
@@ -103,6 +103,22 @@ class IPAllowlistMiddleware(Middleware):
                 return True
         return False
 
+    def _authorize(self, ctx: MiddlewareContext) -> None:
+        """Common authorization for both list_tools and call_tool."""
+        if not self.allowed_networks:
+            return
+        client_ip = self._extract_client_ipv4(ctx)
+        if not client_ip:
+            logger.info(
+                "Blocked request: missing/invalid client IP (invalid X-Forwarded-For or peer)"
+            )
+            raise PermissionError(
+                f"IP '{client_ip or 'unknown'}' not allowed or invalid XFF"
+            )
+        if not self._is_allowed_ip(client_ip):
+            logger.info("Blocked request from disallowed IP: %s", client_ip)
+            raise PermissionError(f"IP '{client_ip}' not allowed")
+
     def _extract_client_ipv4(self, ctx: MiddlewareContext) -> Optional[str]:
         """Extract client IPv4 using the same approach as gpt-mcp-filter's MCP manager:
         - Prefer FastMCP context HTTP request (fctx.get_http_request())
@@ -196,44 +212,11 @@ class IPAllowlistMiddleware(Middleware):
         return None
 
     async def on_list_tools(self, ctx: MiddlewareContext, call_next: CallNext) -> Any:
-        # If no networks configured, allow by default
-        if not self.allowed_networks:
-            return await call_next(ctx)
-
-        client_ip = self._extract_client_ipv4(ctx)
-        if not client_ip:
-            # Treat missing/invalid XFF or invalid peer as not allowed
-            logger.info(
-                "Blocked request: missing/invalid client IP (invalid X-Forwarded-For or peer)"
-            )
-            raise PermissionError(
-                f"IP '{client_ip or 'unknown'}' not allowed or invalid XFF"
-            )
-
-        if not self._is_allowed_ip(client_ip):
-            logger.info("Blocked request from disallowed IP: %s", client_ip)
-            raise PermissionError(f"IP '{client_ip}' not allowed")
-
+        self._authorize(ctx)
         return await call_next(ctx)
 
     async def on_call_tool(self, ctx: MiddlewareContext, call_next: CallNext) -> Any:
-        # same logic for call_tool
-        if not self.allowed_networks:
-            return await call_next(ctx)
-
-        client_ip = self._extract_client_ipv4(ctx)
-        if not client_ip:
-            logger.info(
-                "Blocked request: missing/invalid client IP (invalid X-Forwarded-For or peer)"
-            )
-            raise PermissionError(
-                f"IP '{client_ip or 'unknown'}' not allowed or invalid XFF"
-            )
-
-        if not self._is_allowed_ip(client_ip):
-            logger.info("Blocked request from disallowed IP: %s", client_ip)
-            raise PermissionError(f"IP '{client_ip}' not allowed")
-
+        self._authorize(ctx)
         return await call_next(ctx)
 
 
@@ -269,6 +252,10 @@ if __name__ == "__main__":
         OBFUSCATED_PATH,
         BASE_URL,
     )
+    if ALLOWED_NETWORKS:
+        logger.info("Loaded %d allowed IPv4 networks", len(ALLOWED_NETWORKS))
+    else:
+        logger.info("No IP allowlist configured; all source IPs permitted")
 
     # Add IP allowlist middleware first (so it runs before GitHub checks)
     if ALLOWED_NETWORKS:
@@ -277,9 +264,32 @@ if __name__ == "__main__":
     # Keep the GitHub allowlist middleware
     proxy.add_middleware(AllowlistMiddleware())
 
-    proxy.run(
-        transport="http",
-        host=INTERNAL_HOST,
-        port=INTERNAL_PORT,
-        path=f"/{OBFUSCATED_PATH}",
-    )
+    stop_event = asyncio.Event()
+
+    def _signal_handler(signum, frame):
+        logger.info("Received signal %s; shutting down...", signum)
+        try:
+            loop = asyncio.get_event_loop()
+            loop.call_soon_threadsafe(stop_event.set)
+        except RuntimeError:
+            # No running loop; best-effort log only
+            pass
+
+    try:
+        signal.signal(signal.SIGINT, _signal_handler)
+        signal.signal(signal.SIGTERM, _signal_handler)
+    except Exception:
+        # Not all platforms support signals in the same way (e.g., Windows)
+        pass
+
+    try:
+        proxy.run(
+            transport="http",
+            host=INTERNAL_HOST,
+            port=INTERNAL_PORT,
+            path=f"/{OBFUSCATED_PATH}",
+        )
+    except KeyboardInterrupt:
+        logger.info("Interrupted by user; shutting down...")
+    finally:
+        logger.info("Server stopped.")
