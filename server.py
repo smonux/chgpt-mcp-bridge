@@ -229,7 +229,11 @@ class IPAllowlistMiddleware(Middleware):
 # === Allowlist middleware (GitHub users) ===
 class AllowlistMiddleware(Middleware):
     def _check(self) -> None:
-        token = get_access_token()
+        try:
+            token = get_access_token()
+        except Exception:
+            logger.info("Blocked request: failed to fetch access token", exc_info=True)
+            raise PermissionError("User 'anonymous' is not allowed")
         login = token.claims.get("login") if token else None
         if not login or (GITHUB_USERS and login not in GITHUB_USERS):
             logger.info(
