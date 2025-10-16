@@ -227,8 +227,21 @@ class IPAllowlistMiddleware(Middleware):
 
 
 # === Allowlist middleware (GitHub users) ===
+def _should_skip_oauth() -> bool:
+    """Return True when OAuth checks should be skipped."""
+    value = os.getenv("SKIP_OAUTH")
+    if value is None:
+        return False
+    return value.strip().lower() == "false"
+
+
 class AllowlistMiddleware(Middleware):
     def _check(self) -> None:
+        if _should_skip_oauth():
+            logger.debug(
+                "Skipping OAuth check because SKIP_OAUTH is set to 'false' (case-insensitive)"
+            )
+            return
         try:
             token = get_access_token()
         except Exception:

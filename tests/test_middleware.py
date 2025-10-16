@@ -204,3 +204,13 @@ class TestAllowlistMiddleware:
             with pytest.raises(PermissionError) as ei:
                 asyncio.run(mw.on_list_tools(fake_ctx, dummy_call_next))
             assert "anonymous" in str(ei.value).lower() or "not allowed" in str(ei.value).lower()
+
+    def test_skip_oauth_env_disables_check(self, fake_ctx, dummy_call_next, monkeypatch):
+        monkeypatch.setenv("SKIP_OAUTH", "False")
+        mw = AllowlistMiddleware()
+
+        with patch("server.get_access_token") as mock_get:
+            result = asyncio.run(mw.on_list_tools(fake_ctx, dummy_call_next))
+
+        assert result == "OK"
+        mock_get.assert_not_called()
