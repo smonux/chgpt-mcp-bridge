@@ -1,5 +1,6 @@
 import asyncio
 import ipaddress
+import logging
 import os
 import types
 import pytest
@@ -214,3 +215,35 @@ class TestAllowlistMiddleware:
 
         assert result == "OK"
         mock_get.assert_not_called()
+
+
+class TestStartupSecurity:
+    def test_requires_at_least_two_measures(self, monkeypatch, caplog):
+        import server
+
+        caplog.set_level(logging.INFO)
+        monkeypatch.setattr(server, "ALLOWED_NETWORKS", [])
+        monkeypatch.setattr(server, "OBFUSCATED_PATH", "shouldberandom")
+        monkeypatch.setenv("SKIP_OAUTH", "false")
+
+        with pytest.raises(RuntimeError):
+            server._startup_security_check()
+
+        assert any("Refusing to start" in record.message for record in caplog.records)
+
+    def test_reports_active_measures(self, monkeypatch, caplog):
+        import server
+
+        caplog.set_level(logging.INFO)
+        monkeypatch.setattr(
+            server, "ALLOWED_NETWORKS", [ipaddress.ip_network("10.1.0.0/16")]
+        )
+        monkeypatch.setattr(server, "OBFUSCATED_PATH", "supersecret")
+        monkeypatch.delenv("SKIP_OAUTH", raising=False)
+
+        server._startup_security_check()
+
+        messages = [record.message for record in caplog.records]
+        assert any("✅ OAuth authentication enabled" in msg for msg in messages)
+        assert any("✅ IP allowlist enabled" in msg for msg in messages)
+        assert any("✅ Obfuscated URL path enabled" in msg for msg in messages)

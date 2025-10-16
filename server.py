@@ -2,7 +2,7 @@ import os, asyncio, json, signal
 from pathlib import Path
 from dotenv import load_dotenv
 import ipaddress
-from typing import Any, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 load_dotenv()  # load .env automatically
 
@@ -235,6 +235,48 @@ def _should_skip_oauth() -> bool:
     return value.strip().lower() == "false"
 
 
+def _is_obfuscated_path(path: str) -> bool:
+    """Obfuscated when not default value and length >= 8."""
+    if not path:
+        return False
+    normalized = path.strip()
+    if normalized == "shouldberandom":
+        return False
+    return len(normalized) >= 8
+
+
+def _compute_security_status() -> Dict[str, bool]:
+    """Collect security feature availability for startup reporting."""
+    return {
+        "oauth": not _should_skip_oauth(),
+        "ip_allowlist": bool(ALLOWED_NETWORKS),
+        "obfuscated_url": _is_obfuscated_path(OBFUSCATED_PATH or ""),
+    }
+
+
+def _startup_security_check() -> None:
+    """Log active security measures and refuse to boot if under-secured."""
+    status = _compute_security_status()
+    measures = [
+        ("OAuth authentication", status["oauth"]),
+        ("IP allowlist", status["ip_allowlist"]),
+        ("Obfuscated URL path", status["obfuscated_url"]),
+    ]
+    active_count = 0
+    for label, active in measures:
+        emoji = "✅" if active else "⚠️"
+        message = f"{emoji} {label} {'enabled' if active else 'disabled'}"
+        log_level = logging.INFO if active else logging.WARNING
+        logger.log(log_level, message)
+        if active:
+            active_count += 1
+    if active_count < 2:
+        logger.error(
+            "Refusing to start: enable at least two security measures (OAuth, IP allowlist, obfuscated URL)."
+        )
+        raise RuntimeError("Insufficient security configuration")
+
+
 class AllowlistMiddleware(Middleware):
     def _check(self) -> None:
         if _should_skip_oauth():
@@ -281,6 +323,8 @@ if __name__ == "__main__":
         logger.info("Loaded %d allowed IPv4 networks", len(ALLOWED_NETWORKS))
     else:
         logger.info("No IP allowlist configured; all source IPs permitted")
+
+    _startup_security_check()
 
     # Add IP allowlist middleware first (so it runs before GitHub checks)
     if ALLOWED_NETWORKS:

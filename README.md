@@ -13,9 +13,19 @@ Still, if you follow this recommendations:
   - you run it within a VM (VirtualBox, Lima, whatever) or in a disposable machine (RPi) sharing just what you need the LLM to know
   - you use the source IP filtering mechanism
   - you drop the tunnel when you aren't using it
-  - you obfuscate the url (security through obscurity gets a lot of bad press but for untargeted attacks it's very effective)
+- you obfuscate the url (security through obscurity gets a lot of bad press but for untargeted attacks it's very effective)
 
 I think you wouldn't be totally mad if you decide to run it (still a little bit).
+
+### Startup security check
+
+When the proxy boots it now performs an upfront security audit. Three safeguards are evaluated and reported with emojis in the logs:
+
+- ✅/⚠️ OAuth authentication (disabled only when `SKIP_OAUTH=false`)
+- ✅/⚠️ IP allowlist (set via `ALLOWED_RANGES_FILE`)
+- ✅/⚠️ Obfuscated URL path (non-default `OBFUSCATED_PATH` with at least 8 characters)
+
+If fewer than two protections are active the server refuses to start and raises an error. Adjust your configuration until at least two checks pass before retrying.
 
 ## Introduction
 
@@ -94,7 +104,7 @@ Edit the .env file. Important variables:
 - MCP_JSON_PATH: Path to your MCP server config (default ./mcp.json)
 - SERVER_NAME: Name ChatGPT will see for the MCP server
 - ALLOWED_RANGES_FILE: Optional path to IPv4 CIDR allowlist; if set, only those source IPs are allowed
-- OBFUSCATED_PATH: A random-looking path segment added to your public endpoint for obscurity (default "shouldberandom"). Set this to a long random string.
+- OBFUSCATED_PATH: A random-looking path segment added to your public endpoint for obscurity. To satisfy the startup check it must differ from the default `"shouldberandom"` and be at least 8 characters long.
 
 Optional: Restrict source IPs to OpenAI
 - Generate a ranges file using the helper script:
@@ -106,7 +116,8 @@ Optional: Restrict source IPs to OpenAI
 - Ensure your .env and mcp.json are ready
 - Start the server:
   - python server.py
-- The proxy will listen on INTERNAL_HOST:INTERNAL_PORT and expose an HTTP endpoint path of /{OBFUSCATED_PATH}.
+- On startup you will see emoji-tagged status lines for each security measure; ensure at least two are ✅ or the process will exit.
+- The proxy then listens on INTERNAL_HOST:INTERNAL_PORT and exposes an HTTP endpoint path of /{OBFUSCATED_PATH}.
 
 Example local URL: http://127.0.0.1:8888/your-long-random-path
 
@@ -157,4 +168,3 @@ OpenAI publishes ChatGPT Actions IP ranges at https://openai.com/chatgpt-actions
 - Deactivate and remove the virtualenv
 - Remove the tunnel configuration if any
 - Delete the .env if it contains secrets
-
