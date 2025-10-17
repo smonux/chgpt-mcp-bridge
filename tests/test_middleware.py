@@ -6,7 +6,7 @@ import types
 import pytest
 from unittest.mock import patch
 
-from server import IPAllowlistMiddleware, AllowlistMiddleware
+from server import IPAllowlistMiddleware, AllowlistMiddleware, _build_auth_provider
 
 
 @pytest.fixture
@@ -247,3 +247,10 @@ class TestStartupSecurity:
         assert any("✅ OAuth authentication enabled" in msg for msg in messages)
         assert any("✅ IP allowlist enabled" in msg for msg in messages)
         assert any("✅ Obfuscated URL path enabled" in msg for msg in messages)
+
+
+class TestAuthProviderBuilder:
+    def test_returns_none_when_skip_oauth(self, monkeypatch):
+        monkeypatch.setenv("SKIP_OAUTH", "true")
+        provider = _build_auth_provider()
+        assert provider is None

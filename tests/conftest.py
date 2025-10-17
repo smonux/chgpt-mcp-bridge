@@ -11,6 +11,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 os.environ.setdefault("GITHUB_CLIENT_ID", "test-client-id")
 os.environ.setdefault("GITHUB_CLIENT_SECRET", "test-client-secret")
 os.environ.setdefault("EXTERNAL_HOSTNAME", "example.test")
+os.environ["SKIP_OAUTH"] = "false"
 
 # Optional: keep logs quieter in tests unless explicitly enabled
 os.environ.setdefault("DEBUGLEVEL", "WARNING")

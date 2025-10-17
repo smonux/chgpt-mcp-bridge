@@ -53,12 +53,22 @@ if not (GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET and EXTERNAL_HOSTNAME):
 BASE_URL = f"{BASE_URL_SCHEME}://{EXTERNAL_HOSTNAME}".rstrip("/")
 
 # === Auth provider (GitHub OAuth) ===
-auth_provider = GitHubProvider(
-    client_id=GITHUB_CLIENT_ID,
-    client_secret=GITHUB_CLIENT_SECRET,
-    base_url=BASE_URL,
-    redirect_path=OAUTH_REDIRECT_PATH,
-)
+def _build_auth_provider() -> Optional[GitHubProvider]:
+    """
+    Return a GitHub auth provider unless OAuth is explicitly skipped.
+
+    FastMCP enforces authentication whenever an auth provider is registered.
+    When SKIP_OAUTH is set we must return None so that FastMCP does not emit 401s.
+    """
+    if _should_skip_oauth():
+        logger.info("OAuth disabled via SKIP_OAUTH; FastMCP auth provider will not be registered.")
+        return None
+    return GitHubProvider(
+        client_id=GITHUB_CLIENT_ID,
+        client_secret=GITHUB_CLIENT_SECRET,
+        base_url=BASE_URL,
+        redirect_path=OAUTH_REDIRECT_PATH,
+    )
 
 
 # === Helper: load IPv4 CIDRs from file (newline separated) ===
@@ -308,7 +318,7 @@ class AllowlistMiddleware(Middleware):
 
 if __name__ == "__main__":
     config = json.loads(Path(MCP_JSON_PATH).read_text(encoding="utf-8"))
-    proxy = FastMCP.as_proxy(config, name=SERVER_NAME, auth=auth_provider)
+    proxy = FastMCP.as_proxy(config, name=SERVER_NAME, auth=_build_auth_provider())
 
     logger.info(
         "Starting {0} on http://{1}:{2}/{3} (public base: {4}/{3})".format(
