@@ -13,19 +13,9 @@ Still, if you follow this recommendations:
   - you run it within a VM (VirtualBox, Lima, whatever) or in a disposable machine (RPi) sharing just what you need the LLM to know
   - you use the source IP filtering mechanism
   - you drop the tunnel when you aren't using it
-- you obfuscate the url (security through obscurity gets a lot of bad press but for untargeted attacks it's very effective)
+  - you obfuscate the url (security through obscurity gets a lot of bad press but for untargeted attacks it's very effective)
 
-I think you wouldn't be totally mad if you decide to run it (still a little bit).
-
-### Startup security check
-
-When the proxy boots it now performs an upfront security audit. Three safeguards are evaluated and reported with emojis in the logs:
-
-- ✅/⚠️ OAuth authentication (disabled only when `SKIP_OAUTH` is truthy, e.g. `SKIP_OAUTH=true`)
-- ✅/⚠️ IP allowlist (set via `ALLOWED_RANGES_FILE`)
-- ✅/⚠️ Obfuscated URL path (non-default `OBFUSCATED_PATH` with at least 8 characters)
-
-If fewer than two protections are active the server refuses to start and raises an error. Adjust your configuration until at least two checks pass before retrying.
+I think you wouldn't be totally mad if you decide to run it.
 
 ## Introduction
 
@@ -46,7 +36,17 @@ This script allows to run a proxy that supports GitHub as an OAuth provider, and
 
 For enhaced security it allows to keep a list of permitted ip ranges. This way only connections that originate from OpenAI are permitted (OpenAI publishes their CIDR ranges in https://openai.com/chatgpt-actions.json).
 
-This NOT solves the **valid https and Internet reachable** problem, but there are standardized solutions for that.
+And finally, it allows to set a custom uri-path, so it's not easy to discover by bots.
+
+When the proxy boots it performs an upfront security audit. Three safeguards are evaluated and reported with emojis in the logs:
+
+- ✅/⚠️ OAuth authentication (disabled only when `SKIP_OAUTH` is truthy, e.g. `SKIP_OAUTH=true`)
+- ✅/⚠️ IP allowlist (set via `ALLOWED_RANGES_FILE`)
+- ✅/⚠️ Obfuscated URL path (non-default `OBFUSCATED_PATH` with at least 8 characters)
+
+If fewer than two protections are active the server refuses to start and raises an error. Adjust your configuration until at least two checks pass before retrying.
+
+There is still the **valid https and Internet reachable** problem, but there are standardized solutions for that.
 
 ### How to get a valid https endpoint routed to a personal computer behind NAT
 
