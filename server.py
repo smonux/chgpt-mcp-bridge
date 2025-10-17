@@ -232,7 +232,8 @@ def _should_skip_oauth() -> bool:
     value = os.getenv("SKIP_OAUTH")
     if value is None:
         return False
-    return value.strip().lower() == "false"
+    normalized = value.strip().lower()
+    return normalized in {"1", "true", "yes", "on"}
 
 
 def _is_obfuscated_path(path: str) -> bool:
@@ -281,7 +282,7 @@ class AllowlistMiddleware(Middleware):
     def _check(self) -> None:
         if _should_skip_oauth():
             logger.debug(
-                "Skipping OAuth check because SKIP_OAUTH is set to 'false' (case-insensitive)"
+                "Skipping OAuth check because SKIP_OAUTH is set to a truthy value (true/1/yes/on, case-insensitive)"
             )
             return
         try:

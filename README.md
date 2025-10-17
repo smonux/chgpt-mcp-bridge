@@ -21,7 +21,7 @@ I think you wouldn't be totally mad if you decide to run it (still a little bit)
 
 When the proxy boots it now performs an upfront security audit. Three safeguards are evaluated and reported with emojis in the logs:
 
-- ✅/⚠️ OAuth authentication (disabled only when `SKIP_OAUTH=false`)
+- ✅/⚠️ OAuth authentication (disabled only when `SKIP_OAUTH` is truthy, e.g. `SKIP_OAUTH=true`)
 - ✅/⚠️ IP allowlist (set via `ALLOWED_RANGES_FILE`)
 - ✅/⚠️ Obfuscated URL path (non-default `OBFUSCATED_PATH` with at least 8 characters)
 

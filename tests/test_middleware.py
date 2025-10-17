@@ -207,7 +207,7 @@ class TestAllowlistMiddleware:
             assert "anonymous" in str(ei.value).lower() or "not allowed" in str(ei.value).lower()
 
     def test_skip_oauth_env_disables_check(self, fake_ctx, dummy_call_next, monkeypatch):
-        monkeypatch.setenv("SKIP_OAUTH", "False")
+        monkeypatch.setenv("SKIP_OAUTH", "True")
         mw = AllowlistMiddleware()
 
         with patch("server.get_access_token") as mock_get:
@@ -224,7 +224,7 @@ class TestStartupSecurity:
         caplog.set_level(logging.INFO)
         monkeypatch.setattr(server, "ALLOWED_NETWORKS", [])
         monkeypatch.setattr(server, "OBFUSCATED_PATH", "shouldberandom")
-        monkeypatch.setenv("SKIP_OAUTH", "false")
+        monkeypatch.setenv("SKIP_OAUTH", "true")
 
         with pytest.raises(RuntimeError):
             server._startup_security_check()
