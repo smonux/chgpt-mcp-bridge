@@ -9,7 +9,7 @@ load_dotenv()  # load .env automatically
 from fastmcp import FastMCP
 from fastmcp.server.auth.providers.github import GitHubProvider
 from fastmcp.server.middleware import Middleware, MiddlewareContext, CallNext
-from fastmcp.server.dependencies import get_access_token
+from fastmcp.server.dependencies import get_access_token, get_http_request
 import logging
 
 DEBUGLEVEL = os.getenv("DEBUGLEVEL", "").strip()
@@ -131,7 +131,7 @@ class IPAllowlistMiddleware(Middleware):
 
     def _extract_client_ipv4(self, ctx: MiddlewareContext) -> Optional[str]:
         """Extract client IPv4 using the same approach as gpt-mcp-filter's MCP manager:
-        - Prefer FastMCP context HTTP request (fctx.get_http_request())
+        - Prefer FastMCP context HTTP request (get_http_request())
           * default to TCP peer (req.client.host)
           * if X-Forwarded-For present, take the left-most value
         - Validate strictly as IPv4.
@@ -139,32 +139,30 @@ class IPAllowlistMiddleware(Middleware):
         """
         # 1) Try FastMCP context request (most reliable in this stack)
         try:
-            fctx = getattr(ctx, "fastmcp_context", None)
-            if fctx is not None:
-                req = fctx.get_http_request()
-                remote_ip = getattr(getattr(req, "client", None), "host", None)
-                # Override with X-Forwarded-For first value if present
+            req = get_http_request()
+            remote_ip = getattr(getattr(req, "client", None), "host", None)
+            # Override with X-Forwarded-For first value if present
+            try:
+                for k, v in req.headers.items():
+                    if k.lower() == "x-forwarded-for":
+                        remote_ip = v.split(",")[0].strip()
+                        break
+            except Exception:
+                logger.debug(
+                    "Failed to read X-Forwarded-For from headers", exc_info=True
+                )
+            if remote_ip:
                 try:
-                    for k, v in req.headers.items():
-                        if k.lower() == "x-forwarded-for":
-                            remote_ip = v.split(",")[0].strip()
-                            break
-                except Exception:
-                    logger.debug(
-                        "Failed to read X-Forwarded-For from headers", exc_info=True
+                    ipaddress.IPv4Address(remote_ip)
+                    return remote_ip
+                except ValueError:
+                    logger.info(
+                        "Invalid client IP in request headers/peer: %s", remote_ip
                     )
-                if remote_ip:
-                    try:
-                        ipaddress.IPv4Address(remote_ip)
-                        return remote_ip
-                    except ValueError:
-                        logger.info(
-                            "Invalid client IP in request headers/peer: %s", remote_ip
-                        )
-                        return None
+                    return None
         except Exception:
             logger.debug(
-                "Failed to extract client IP from FastMCP context", exc_info=True
+                "Failed to extract client IP from FastMCP request", exc_info=True
             )
 
         # 2) Fallback: Attempt to read request headers in common ASGI shapes

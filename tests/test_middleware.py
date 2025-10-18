@@ -47,23 +47,17 @@ class TestIPAllowlistMiddleware:
                 }
                 self.client = types.SimpleNamespace(host="203.0.113.10")
 
-        class DummyFastCtx:
-            def __init__(self, req):
-                self._req = req
-
-            def get_http_request(self):
-                return self._req
-
         request = DummyRequest()
         ctx = types.SimpleNamespace(
-            fastmcp_context=DummyFastCtx(request),
+            fastmcp_context=None,
             request=None,
             client=None,
             client_address=None,
             state={},
         )
 
-        result = asyncio.run(mw.on_list_tools(ctx, dummy_call_next))
+        with patch("server.get_http_request", return_value=request):
+            result = asyncio.run(mw.on_list_tools(ctx, dummy_call_next))
         assert result == "OK"
 
     def test_block_when_ip_out_of_range(self, fake_ctx, dummy_call_next):
