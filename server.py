@@ -1,3 +1,10 @@
+# /// script
+# requires-python = ">=3.13"
+# dependencies = [
+#     "dotenv",
+#     "fastmcp==2.12",
+# ]
+# ///
 import os, asyncio, json, signal
 from pathlib import Path
 from dotenv import load_dotenv
